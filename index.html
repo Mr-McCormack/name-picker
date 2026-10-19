@@ -146,15 +146,7 @@ body.inpip #dock{display:inline-block;padding:min(12px,2vh) 12px;white-space:now
 </style>
 </head>
 <body>
-<div class="gate" id="gate">
-  <div class="gate-card">
-    <h1>Name Picker</h1>
-    <p id="gateMsg">Checking sign-in…</p>
-    <button id="signin" type="button" hidden>Sign in with Google</button>
-  </div>
-</div>
-
-<div class="wrap" id="app" hidden>
+<div class="wrap" id="app">
   <header>
     <div class="row">
       <h1>Name Picker</h1>
@@ -209,7 +201,7 @@ body.inpip #dock{display:inline-block;padding:min(12px,2vh) 12px;white-space:now
     <div class="panel">
       <h2>Roster</h2>
       <textarea id="roster" spellcheck="false" aria-label="Roster, one name per line"></textarea>
-      <p class="hint">One name per line. Changes save to your Google account automatically.</p>
+      <p class="hint">One name per line. First name and last initial (Avery J.) works well. Changes save on this computer automatically.</p>
       <div class="inline-confirm">
         <input id="listName" aria-label="Class name" style="flex:1;min-width:0;background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:8px 10px">
         <button id="delList" type="button">Delete class</button>
@@ -233,60 +225,25 @@ body.inpip #dock{display:inline-block;padding:min(12px,2vh) 12px;white-space:now
       <p class="empty" id="histEmpty">No one picked yet.</p>
     </div>
   </div>
-  <div class="account"><span id="who"></span><span id="saveState"></span><button id="signout" type="button">Sign out</button></div>
+  <div class="account"><span>Saved on this computer only. Nothing is sent anywhere.</span><button id="backup" type="button">Save backup file</button><button id="restoreBtn" type="button">Load backup file</button><input type="file" id="restoreFile" accept=".json,application/json" hidden><span id="saveState" role="status"></span></div>
 </div>
 
-<script type="module">
-import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {getAuth,GoogleAuthProvider,signInWithPopup,onAuthStateChanged,signOut} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import {getFirestore,doc,getDoc,setDoc} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import {firebaseConfig} from "./config.js";
+<script>
+(function(){
+  const KEY="namepicker.v1";
+  let saved=null;
+  try{saved=JSON.parse(localStorage.getItem(KEY))}catch(e){}
+  startApp(saved,st=>{localStorage.setItem(KEY,JSON.stringify(st))});
+})();
 
-const gate=document.getElementById("gate"), gateMsg=document.getElementById("gateMsg"), signinBtn=document.getElementById("signin");
-let started=false;
-
-if(!firebaseConfig.apiKey||firebaseConfig.apiKey.includes("PASTE")){
-  gateMsg.textContent="Your Firebase settings haven't been added to config.js yet. See step 6 of the setup directions.";
-}else{
-  const fbApp=initializeApp(firebaseConfig), auth=getAuth(fbApp), db=getFirestore(fbApp);
-  signinBtn.addEventListener("click",()=>{
-    gateMsg.textContent="Finish signing in with the Google window.";
-    signInWithPopup(auth,new GoogleAuthProvider()).catch(e=>{
-      gateMsg.textContent=e.code==="auth/unauthorized-domain"
-        ?"This web address isn't approved in Firebase yet. See step 10 of the setup directions."
-        :"Sign-in didn't finish. Press the button to try again.";
-    });
-  });
-  onAuthStateChanged(auth,async user=>{
-    if(!user){
-      gate.hidden=false; document.getElementById("app").hidden=true;
-      gateMsg.textContent="Sign in with your Google account to open your classes."; signinBtn.hidden=false; return;
-    }
-    if(started) return;
-    signinBtn.hidden=true; gateMsg.textContent="Loading your classes…";
-    const ref=doc(db,"namepicker",user.uid);
-    let saved=null;
-    try{const snap=await getDoc(ref); if(snap.exists()) saved=JSON.parse(snap.data().state)}
-    catch(e){gateMsg.textContent="Couldn't load your classes. Check that the database rules from step 4 are published, then reload this page."; return}
-    started=true; gate.hidden=true; document.getElementById("app").hidden=false;
-    startApp(saved,st=>setDoc(ref,{state:JSON.stringify(st),updated:Date.now()}),user);
-  });
-  document.getElementById("signout").addEventListener("click",()=>signOut(auth).then(()=>location.reload()));
-}
-
-function startApp(saved,persist,user){
+function startApp(saved,persist){
   let pipWin=null;
   const $=id=>document.getElementById(id)||(pipWin?pipWin.document.getElementById(id):null);
   const sample={lists:[{id:"p1",name:"2nd Period (example)",roster:["Avery Johnson","Marcus Lee","Sofia Ramirez","Elijah Brooks","Priya Patel","Caleb Turner","Hannah Kim","Jayden Scott","Olivia Nguyen","Mateo Garcia","Grace Thompson","Isaiah Carter"],used:[],history:[]}],current:"p1",norepeat:true};
   let state=(saved&&saved.lists&&saved.lists.length)?saved:sample;
   state.mode=state.mode||"pick"; state.gmode=state.gmode||"size:4";
   state.lists.forEach(l=>{l.apart=l.apart||[];l.groups=l.groups||null;l.used=l.used||[];l.history=l.history||[]});
-  let saveTimer;
-  const save=()=>{
-    clearTimeout(saveTimer); $("saveState").textContent="Saving…";
-    saveTimer=setTimeout(()=>persist(state).then(()=>{$("saveState").textContent="Saved"},()=>{$("saveState").textContent="Couldn't save. Check your internet connection."}),600);
-  };
-  $("who").textContent="Signed in as "+user.email;
+  const save=()=>{try{persist(state)}catch(e){$("saveState").textContent="Couldn't save on this computer. Use Save backup file to keep your rosters."}};
   const cur=()=>state.lists.find(l=>l.id===state.current)||state.lists[0];
   const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
   let spinning=false;
@@ -312,6 +269,8 @@ function startApp(saved,persist,user){
   function short(full){
     const parts=full.trim().split(/\s+/);
     if(parts.length<2) return full.trim();
+    const last=parts[parts.length-1];
+    if(parts.length===2&&last.replace(".","").length<=1) return parts[0]+" "+last.charAt(0).toUpperCase()+".";
     return parts[0].charAt(0).toUpperCase()+". "+parts.slice(1).join(" ");
   }
   function esc(s){return s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
@@ -524,6 +483,30 @@ function startApp(saved,persist,user){
     fit();
   }
   $("floatBtn").addEventListener("click",openFloat);
+
+  /* Backup file: moves rosters to another computer or browser */
+  $("backup").addEventListener("click",()=>{
+    const blob=new Blob([JSON.stringify(state,null,1)],{type:"application/json"});
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+    a.download="name-picker-backup-"+new Date().toISOString().slice(0,10)+".json";
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+    $("saveState").textContent="Backup file saved to your Downloads folder.";
+  });
+  $("restoreBtn").addEventListener("click",()=>$("restoreFile").click());
+  $("restoreFile").addEventListener("change",async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    try{
+      const data=JSON.parse(await f.text());
+      if(!data||!Array.isArray(data.lists)||!data.lists.length) throw 0;
+      data.lists.forEach(l=>{l.roster=l.roster||[];l.apart=l.apart||[];l.groups=l.groups||null;l.used=l.used||[];l.history=l.history||[]});
+      Object.keys(state).forEach(k=>delete state[k]); Object.assign(state,data);
+      state.mode=state.mode||"pick"; state.gmode=state.gmode||"size:4";
+      if(document.activeElement&&document.activeElement.blur) document.activeElement.blur();
+      resetStage(); save(); render();
+      $("saveState").textContent="Loaded "+state.lists.length+(state.lists.length===1?" class":" classes")+" from the backup file.";
+    }catch(err){$("saveState").textContent="That file isn't a Name Picker backup."}
+    e.target.value="";
+  });
   $("dock").addEventListener("click",()=>{if(pipWin) pipWin.close()});
   $("dockMain").addEventListener("click",()=>{if(pipWin) pipWin.close()});
 
