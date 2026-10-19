@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Name Picker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;900&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+[hidden]{display:none!important}
+body{margin:0}
+/* Layout: one big projector-sized stage on graph paper, roster controls tucked below */
+:root{
+  --paper:#f3f6f8; --grid:#dde6ec; --ink:#14232f; --muted:#5d6f7c;
+  --card:#ffffff; --line:#c9d6df; --accent:#1d7a55; --accent-ink:#ffffff; --flash:#8aa0ae;
+  --display:"Archivo","Arial Black",system-ui,sans-serif;
+  --body:"Atkinson Hyperlegible",system-ui,-apple-system,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#101a21; --grid:#1a2731; --ink:#e8eff3; --muted:#93a6b3;
+  --card:#16232d; --line:#2a3b47; --accent:#3fbf8a; --accent-ink:#06150e; --flash:#5f7686; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#101a21; --grid:#1a2731; --ink:#e8eff3; --muted:#93a6b3;
+  --card:#16232d; --line:#2a3b47; --accent:#3fbf8a; --accent-ink:#06150e; --flash:#5f7686; color-scheme:dark}
+
+html,body{height:100%}
+body{
+  background-color:var(--paper);
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:28px 28px;
+  color:var(--ink); font-family:var(--body); font-size:16px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+.wrap{max-width:1100px;margin:0 auto;padding-block:20px 40px;display:grid;gap:18px}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+h1{font-family:var(--display);font-weight:900;font-size:1.35rem;margin:0;letter-spacing:-.01em}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+select,button,textarea,input{font:inherit;color:var(--ink)}
+select{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+button{cursor:pointer;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 14px}
+button:hover{border-color:var(--muted)}
+button:focus-visible,select:focus-visible,textarea:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+.stage{
+  background:var(--card);border:1px solid var(--line);border-radius:16px;
+  min-height:clamp(240px,46vh,480px);display:grid;place-items:center;text-align:center;
+  padding:24px 16px;position:relative;overflow:hidden;
+}
+#name{
+  font-family:var(--display);font-weight:900;line-height:1.02;letter-spacing:-.02em;
+  font-size:clamp(2.6rem,10vw,7.5rem);color:var(--flash);
+  overflow-wrap:anywhere;text-wrap:balance;max-width:100%;
+}
+#name.landed{color:var(--ink);animation:pop .45s cubic-bezier(.2,1.6,.4,1)}
+#name.idle{color:var(--muted);font-size:clamp(1.6rem,5vw,3rem);font-weight:700}
+.stage .under{position:absolute;left:0;right:0;bottom:14px;color:var(--muted);font-size:.95rem}
+@keyframes pop{0%{transform:scale(.92)}100%{transform:scale(1)}}
+#name.landed::after{content:"";display:block;height:8px;margin:14px auto 0;width:min(60%,420px);background:var(--accent);border-radius:4px}
+
+.controls{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:center}
+#pick{background:var(--accent);color:var(--accent-ink);border:none;font-family:var(--display);font-weight:700;
+  font-size:1.35rem;padding:14px 40px;border-radius:12px}
+#pick:disabled{opacity:.55;cursor:default}
+.toggle{display:flex;gap:8px;align-items:center;color:var(--muted)}
+.toggle input{width:18px;height:18px;accent-color:var(--accent)}
+.count{font-variant-numeric:tabular-nums;color:var(--muted)}
+
+.panels{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media (max-width:720px){.panels{grid-template-columns:1fr}}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;gap:10px;min-width:0}
+.panel h2{font-family:var(--display);font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;margin:0;color:var(--muted)}
+textarea{width:100%;box-sizing:border-box;min-height:200px;resize:vertical;background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:10px;line-height:1.5}
+.hint{color:var(--muted);font-size:.85rem;margin:0}
+#history{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+#history li{border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:.95rem}
+#history li:first-child{border-color:var(--accent);font-weight:700}
+.empty{color:var(--muted);font-size:.95rem}
+.inline-confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+@media (prefers-reduced-motion:reduce){#name.landed{animation:none}}
+
+/* Mini view: just the name and a Pick button, filling whatever window size it has */
+#expand{display:none}
+body.mini{background-size:20px 20px}
+body.mini .wrap{height:100%;box-sizing:border-box;max-width:none;padding-block:10px;gap:10px;grid-template-rows:1fr auto}
+body.mini header,body.mini .panels,body.mini .toggle,body.mini .count,body.mini #reset{display:none}
+body.mini .stage{min-height:0;padding:12px;border-radius:12px}
+body.mini .stage .under{display:none}
+body.mini #name{font-size:min(16vw,26vh);white-space:normal}
+body.mini #name.idle{font-size:min(7vw,10vh)}
+body.mini #name.landed::after{height:max(4px,1vh);margin-top:max(6px,1.5vh)}
+body.mini .controls{flex-wrap:nowrap;gap:8px}
+body.mini #pick{flex:1;font-size:max(1rem,min(5vw,5vh));padding:min(12px,2vh) 16px}
+body.mini #expand{display:inline-block;padding:min(12px,2vh) 12px;white-space:nowrap}
+#minibtn{white-space:nowrap}
+
+/* Mode switch: Pick a name / Make groups */
+.modes{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--card)}
+.modes button{border:none;border-radius:0;padding:8px 14px;background:transparent;color:var(--muted);font-weight:700}
+.modes button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+body:not(.groups) .groups-only{display:none!important}
+body.groups .pick-only,body.groups #name,body.groups #under{display:none!important}
+
+/* Groups display */
+#groupsOut{width:100%;align-self:stretch;display:grid;place-items:center}
+.ggrid{--gfs:clamp(1rem,2vw,1.55rem);width:100%;display:grid;gap:12px;
+  grid-template-columns:repeat(auto-fit,minmax(calc(var(--gfs) * 8.5),1fr));align-content:center}
+.grp{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:calc(var(--gfs) * .55) calc(var(--gfs) * .7);text-align:left;min-width:0;
+  animation:rise .35s ease both}
+.grp b{display:block;font-family:var(--display);font-size:calc(var(--gfs) * .55);text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:calc(var(--gfs) * .25)}
+.grp ul{list-style:none;margin:0;padding:0;display:grid;gap:calc(var(--gfs) * .15)}
+.grp li{font-family:var(--display);font-weight:700;font-size:var(--gfs);line-height:1.15;overflow-wrap:anywhere}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.grp{animation:none}}
+#gstatus{color:var(--muted);font-size:.95rem}
+#gstatus.warn{color:#b4531a}
+:root[data-theme="dark"] #gstatus.warn{color:#f0a36b}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) #gstatus.warn{color:#f0a36b}}
+
+/* Keep apart list */
+.apart-add{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.apart-add select{flex:1;min-width:120px}
+#apartList{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+#apartList li{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:8px;padding:6px 6px 6px 12px}
+#apartList li.off{opacity:.55}
+#apartList button{padding:4px 10px}
+body.mini .modes,body.mini #gmode,body.mini #gstatus{display:none!important}
+body.mini #makeGroups{flex:1;font-size:max(1rem,min(5vw,5vh));padding:min(12px,2vh) 16px}
+body.mini .ggrid{gap:min(10px,1.5vh)}
+#makeGroups{background:var(--accent);color:var(--accent-ink);border:none;font-family:var(--display);font-weight:700;font-size:1.35rem;padding:14px 40px;border-radius:12px}
+/* Sign-in screen */
+.gate{min-height:100%;display:grid;place-items:center;padding-block:24px}
+.gate-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:32px 28px;max-width:420px;width:100%;box-sizing:border-box;display:grid;gap:14px;text-align:center}
+.gate-card h1{font-size:2rem}
+.gate-card p{margin:0;color:var(--muted);line-height:1.5}
+#signin{background:var(--accent);color:var(--accent-ink);border:none;font-weight:700;font-size:1.05rem;padding:12px 20px;border-radius:10px}
+.account{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:flex-end;color:var(--muted);font-size:.9rem}
+.account button{padding:4px 12px}
+/* Floating window */
+#floatNote{background:var(--card);border:1px dashed var(--line);border-radius:16px;padding:28px 16px;text-align:center;color:var(--muted);display:grid;gap:10px;justify-items:center}
+#floatNote strong{font-family:var(--display);color:var(--ink);font-size:1.3rem}
+body.mini .account{display:none!important}
+#dock{display:none}
+body.inpip #expand{display:none!important}
+body.inpip #dock{display:inline-block;padding:min(12px,2vh) 12px;white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="gate" id="gate">
+  <div class="gate-card">
+    <h1>Name Picker</h1>
+    <p id="gateMsg">Checking sign-in…</p>
+    <button id="signin" type="button" hidden>Sign in with Google</button>
+  </div>
+</div>
+
+<div class="wrap" id="app" hidden>
+  <header>
+    <div class="row">
+      <h1>Name Picker</h1>
+      <div class="modes" role="group" aria-label="Mode">
+        <button id="modePick" type="button" aria-pressed="true">Pick a name</button>
+        <button id="modeGroups" type="button" aria-pressed="false">Make groups</button>
+      </div>
+    </div>
+    <div class="row">
+      <label for="list" class="hint">Class</label>
+      <select id="list"></select>
+      <button id="addList" type="button">+ New class</button>
+      <button id="minibtn" type="button" title="Shows only the name and a Pick button">Mini view</button>
+      <button id="floatBtn" type="button" title="Opens a small window that stays on top of your other windows">Float</button>
+      <button id="full" type="button">Full screen</button>
+    </div>
+  </header>
+
+  <div id="floatNote" hidden><strong>The picker is floating</strong><span>It stays on top of your other windows. Keep this tab open while you use it.</span><button id="dockMain" type="button">Bring it back here</button></div>
+
+  <section class="stage" id="stage" aria-live="polite">
+    <div id="name" class="idle pick-only">Press Pick or the space bar</div>
+    <div class="under pick-only" id="under"></div>
+    <div id="groupsOut" class="groups-only"></div>
+  </section>
+
+  <div class="controls" id="controlsBar">
+    <button id="pick" type="button" class="pick-only">Pick a name</button>
+    <button id="makeGroups" type="button" class="groups-only">Make groups</button>
+    <select id="gmode" class="groups-only" aria-label="Group size">
+      <option value="size:2">Pairs</option>
+      <option value="size:3">Groups of 3</option>
+      <option value="size:4" selected>Groups of 4</option>
+      <option value="size:5">Groups of 5</option>
+      <option value="size:6">Groups of 6</option>
+      <option value="count:2">2 groups</option>
+      <option value="count:3">3 groups</option>
+      <option value="count:4">4 groups</option>
+      <option value="count:5">5 groups</option>
+      <option value="count:6">6 groups</option>
+      <option value="count:8">8 groups</option>
+    </select>
+    <span id="gstatus" class="groups-only" role="status"></span>
+    <label class="toggle pick-only"><input type="checkbox" id="norepeat" checked> Everyone gets a turn before repeats</label>
+    <span class="count pick-only" id="count"></span>
+    <button id="reset" type="button" class="pick-only">Reset turns</button>
+    <button id="expand" type="button" title="Back to the full view with roster and settings">Full view</button>
+    <button id="dock" type="button" title="Put the picker back in the main window">Dock</button>
+  </div>
+
+  <div class="panels">
+    <div class="panel">
+      <h2>Roster</h2>
+      <textarea id="roster" spellcheck="false" aria-label="Roster, one name per line"></textarea>
+      <p class="hint">One name per line. Changes save to your Google account automatically.</p>
+      <div class="inline-confirm">
+        <input id="listName" aria-label="Class name" style="flex:1;min-width:0;background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:8px 10px">
+        <button id="delList" type="button">Delete class</button>
+        <span id="delConfirm" hidden class="inline-confirm"><span class="hint">Delete this class?</span><button id="delYes" type="button">Yes, delete</button><button id="delNo" type="button">Cancel</button></span>
+      </div>
+    </div>
+    <div class="panel groups-only">
+      <h2>Keep apart</h2>
+      <p class="hint">These students will never be put in the same group.</p>
+      <div class="apart-add">
+        <select id="apartA" aria-label="First student"></select>
+        <select id="apartB" aria-label="Second student"></select>
+        <button id="apartAdd" type="button">Add</button>
+      </div>
+      <ul id="apartList"></ul>
+      <p class="empty" id="apartEmpty">No pairs yet.</p>
+    </div>
+    <div class="panel pick-only">
+      <h2>Picked so far</h2>
+      <ul id="history"></ul>
+      <p class="empty" id="histEmpty">No one picked yet.</p>
+    </div>
+  </div>
+  <div class="account"><span id="who"></span><span id="saveState"></span><button id="signout" type="button">Sign out</button></div>
+</div>
+
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getAuth,GoogleAuthProvider,signInWithPopup,onAuthStateChanged,signOut} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {getFirestore,doc,getDoc,setDoc} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {firebaseConfig} from "./config.js";
+
+const gate=document.getElementById("gate"), gateMsg=document.getElementById("gateMsg"), signinBtn=document.getElementById("signin");
+let started=false;
+
+if(!firebaseConfig.apiKey||firebaseConfig.apiKey.includes("PASTE")){
+  gateMsg.textContent="Your Firebase settings haven't been added to config.js yet. See step 6 of the setup directions.";
+}else{
+  const fbApp=initializeApp(firebaseConfig), auth=getAuth(fbApp), db=getFirestore(fbApp);
+  signinBtn.addEventListener("click",()=>{
+    gateMsg.textContent="Finish signing in with the Google window.";
+    signInWithPopup(auth,new GoogleAuthProvider()).catch(e=>{
+      gateMsg.textContent=e.code==="auth/unauthorized-domain"
+        ?"This web address isn't approved in Firebase yet. See step 10 of the setup directions."
+        :"Sign-in didn't finish. Press the button to try again.";
+    });
+  });
+  onAuthStateChanged(auth,async user=>{
+    if(!user){
+      gate.hidden=false; document.getElementById("app").hidden=true;
+      gateMsg.textContent="Sign in with your Google account to open your classes."; signinBtn.hidden=false; return;
+    }
+    if(started) return;
+    signinBtn.hidden=true; gateMsg.textContent="Loading your classes…";
+    const ref=doc(db,"namepicker",user.uid);
+    let saved=null;
+    try{const snap=await getDoc(ref); if(snap.exists()) saved=JSON.parse(snap.data().state)}
+    catch(e){gateMsg.textContent="Couldn't load your classes. Check that the database rules from step 4 are published, then reload this page."; return}
+    started=true; gate.hidden=true; document.getElementById("app").hidden=false;
+    startApp(saved,st=>setDoc(ref,{state:JSON.stringify(st),updated:Date.now()}),user);
+  });
+  document.getElementById("signout").addEventListener("click",()=>signOut(auth).then(()=>location.reload()));
+}
+
+function startApp(saved,persist,user){
+  let pipWin=null;
+  const $=id=>document.getElementById(id)||(pipWin?pipWin.document.getElementById(id):null);
+  const sample={lists:[{id:"p1",name:"2nd Period (example)",roster:["Avery Johnson","Marcus Lee","Sofia Ramirez","Elijah Brooks","Priya Patel","Caleb Turner","Hannah Kim","Jayden Scott","Olivia Nguyen","Mateo Garcia","Grace Thompson","Isaiah Carter"],used:[],history:[]}],current:"p1",norepeat:true};
+  let state=(saved&&saved.lists&&saved.lists.length)?saved:sample;
+  state.mode=state.mode||"pick"; state.gmode=state.gmode||"size:4";
+  state.lists.forEach(l=>{l.apart=l.apart||[];l.groups=l.groups||null;l.used=l.used||[];l.history=l.history||[]});
+  let saveTimer;
+  const save=()=>{
+    clearTimeout(saveTimer); $("saveState").textContent="Saving…";
+    saveTimer=setTimeout(()=>persist(state).then(()=>{$("saveState").textContent="Saved"},()=>{$("saveState").textContent="Couldn't save. Check your internet connection."}),600);
+  };
+  $("who").textContent="Signed in as "+user.email;
+  const cur=()=>state.lists.find(l=>l.id===state.current)||state.lists[0];
+  const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let spinning=false;
+
+  function render(){
+    const L=cur(); state.current=L.id;
+    $("list").innerHTML=state.lists.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join("");
+    $("list").value=L.id;
+    if(document.activeElement!==$("roster")) $("roster").value=L.roster.join("\n");
+    if(document.activeElement!==$("listName")) $("listName").value=L.name;
+    $("norepeat").checked=state.norepeat;
+    L.used=L.used.filter(n=>L.roster.includes(n));
+    const left=pool().length;
+    $("count").textContent=state.norepeat?`${left} of ${L.roster.length} left`:`${L.roster.length} names`;
+    $("reset").hidden=!state.norepeat;
+    $("pick").disabled=spinning||L.roster.length===0;
+    $("history").innerHTML=L.history.slice(0,20).map(n=>`<li>${esc(short(n))}</li>`).join("");
+    $("histEmpty").hidden=L.history.length>0;
+    $("delList").disabled=state.lists.length<2;
+    renderGroupsUI();
+  }
+  /* "Avery Johnson" -> "A. Johnson"; "Maria De La Cruz" -> "M. De La Cruz"; one-word names stay as typed */
+  function short(full){
+    const parts=full.trim().split(/\s+/);
+    if(parts.length<2) return full.trim();
+    return parts[0].charAt(0).toUpperCase()+". "+parts.slice(1).join(" ");
+  }
+  function esc(s){return s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+  function pool(){const L=cur();return state.norepeat?L.roster.filter(n=>!L.used.includes(n)):L.roster.slice()}
+
+  function pick(){
+    const L=cur(); if(spinning||!L.roster.length) return;
+    let p=pool();
+    let roundDone=false;
+    if(!p.length){L.used=[];p=L.roster.slice();roundDone=true}
+    let choice=p[Math.floor(Math.random()*p.length)];
+    if(p.length>1&&choice===L.history[0]) choice=p.filter(n=>n!==L.history[0])[Math.floor(Math.random()*(p.length-1))];
+    const nameEl=$("name"); spinning=true; render();
+    $("under").textContent=roundDone?"Everyone had a turn. Starting a new round.":"";
+    nameEl.className="";
+    const all=L.roster; let delay=reduce?160:45, last="", steps=0;
+    const maxDelay=reduce?320:420;
+    function tick(){
+      if(delay>=maxDelay){land();return}
+      let n; do{n=all[Math.floor(Math.random()*all.length)]}while(all.length>1&&n===last);
+      last=n; nameEl.textContent=short(n); steps++;
+      delay=delay*(steps<14?1.03:1.14);
+      setTimeout(tick,delay);
+    }
+    function land(){
+      nameEl.textContent=short(choice); nameEl.className="landed";
+      if(state.norepeat&&!L.used.includes(choice)) L.used.push(choice);
+      L.history.unshift(choice); L.history=L.history.slice(0,50);
+      spinning=false; save(); render();
+    }
+    tick();
+  }
+
+  /* ---------- Groups ---------- */
+  function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+  function groupCount(n){
+    const [kind,v]=state.gmode.split(":"); const k=+v;
+    const g=kind==="size"?Math.ceil(n/k):k;
+    return Math.max(1,Math.min(g,n));
+  }
+  function activePairs(L){return L.apart.filter(([a,b])=>L.roster.includes(a)&&L.roster.includes(b))}
+  /* Balanced groups (sizes differ by at most one), never placing a keep-apart pair together.
+     Tries many random orders and keeps the first one with no conflicts. */
+  function buildGroups(names,g,pairs){
+    const bad=new Map(); names.forEach(n=>bad.set(n,new Set()));
+    pairs.forEach(([a,b])=>{bad.get(a).add(b);bad.get(b).add(a)});
+    const caps=Array.from({length:g},(_,i)=>Math.floor(names.length/g)+(i<names.length%g?1:0));
+    let best=null,bestConf=Infinity;
+    for(let t=0;t<800;t++){
+      const order=shuffle(names.slice()).sort((x,y)=>bad.get(y).size-bad.get(x).size+(Math.random()-.5)*.5);
+      const groups=caps.map(()=>[]); let conf=0;
+      for(const n of order){
+        const open=groups.map((gr,i)=>i).filter(i=>groups[i].length<caps[i]);
+        const clean=open.filter(i=>!groups[i].some(m=>bad.get(n).has(m)));
+        const choices=clean.length?clean:open;
+        if(!clean.length) conf++;
+        const min=Math.min(...choices.map(i=>groups[i].length/caps[i]));
+        const tied=choices.filter(i=>groups[i].length/caps[i]===min);
+        groups[tied[Math.floor(Math.random()*tied.length)]].push(n);
+      }
+      if(conf<bestConf){best=groups;bestConf=conf}
+      if(!conf) break;
+    }
+    return {groups:best.map(gr=>shuffle(gr)),conflicts:bestConf};
+  }
+  function makeGroups(){
+    const L=cur(); if(L.roster.length<2) return;
+    const res=buildGroups(L.roster,groupCount(L.roster.length),activePairs(L));
+    L.groups=res.groups; L.groupConflicts=res.conflicts; save(); renderGroupsUI(true);
+  }
+  function renderGroupsUI(animate){
+    const L=cur();
+    syncBody();
+    $("modePick").setAttribute("aria-pressed",state.mode==="pick");
+    $("modeGroups").setAttribute("aria-pressed",state.mode==="groups");
+    $("gmode").value=state.gmode;
+    $("makeGroups").disabled=L.roster.length<2;
+    $("makeGroups").textContent=L.groups?"Make new groups":"Make groups";
+    const out=$("groupsOut");
+    const valid=L.groups&&L.groups.flat().every(n=>L.roster.includes(n))&&L.groups.flat().length===L.roster.length;
+    if(!valid){
+      out.innerHTML=`<div id="gidle" style="color:var(--muted);font-family:var(--display);font-weight:700;font-size:clamp(1.4rem,4vw,2.6rem)">${L.roster.length<2?"Add at least 2 names to the roster":"Press Make groups or the space bar"}</div>`;
+      $("gstatus").textContent=`${L.roster.length} students`; $("gstatus").className="";
+    }else if(animate||!out.querySelector(".ggrid")||out.dataset.sig!==JSON.stringify(L.groups)){
+      out.dataset.sig=JSON.stringify(L.groups);
+      out.innerHTML=`<div class="ggrid">${L.groups.map((g,i)=>`<div class="grp" style="animation-delay:${animate&&!reduce?i*70:0}ms"><b>Group ${i+1}</b><ul>${g.map(n=>`<li>${esc(short(n))}</li>`).join("")}</ul></div>`).join("")}</div>`;
+      if(!animate) out.querySelectorAll(".grp").forEach(e=>e.style.animation="none");
+      const c=L.groupConflicts||0;
+      $("gstatus").textContent=c?`Couldn't keep every pair apart with ${L.groups.length} groups. Try more groups.`:`${L.groups.length} groups · ${L.roster.length} students`;
+      $("gstatus").className=c?"warn":"";
+    }
+    // Keep-apart editor
+    const opts=`<option value="">Choose…</option>`+L.roster.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");
+    ["apartA","apartB"].forEach(id=>{const el=$(id),v=el.value;if(el.dataset.sig!==opts){el.innerHTML=opts;el.dataset.sig=opts;el.value=L.roster.includes(v)?v:""}});
+    $("apartList").innerHTML=L.apart.map(([a,b],i)=>{
+      const on=L.roster.includes(a)&&L.roster.includes(b);
+      return `<li class="${on?"":"off"}"><span>${esc(a)} &amp; ${esc(b)}${on?"":" (not on roster)"}</span><button type="button" data-i="${i}" aria-label="Remove ${esc(a)} and ${esc(b)}">Remove</button></li>`}).join("");
+    $("apartEmpty").hidden=L.apart.length>0;
+    fit();
+  }
+  $("makeGroups").addEventListener("click",makeGroups);
+  $("gmode").addEventListener("change",e=>{state.gmode=e.target.value;save();renderGroupsUI()});
+  $("modePick").addEventListener("click",()=>{state.mode="pick";save();render()});
+  $("modeGroups").addEventListener("click",()=>{state.mode="groups";save();render()});
+  $("apartAdd").addEventListener("click",()=>{
+    const a=$("apartA").value,b=$("apartB").value,L=cur();
+    if(!a||!b||a===b) return;
+    if(!L.apart.some(([x,y])=>(x===a&&y===b)||(x===b&&y===a))) L.apart.push([a,b]);
+    $("apartA").value="";$("apartB").value=""; save(); renderGroupsUI();
+  });
+  $("apartList").addEventListener("click",e=>{
+    const i=e.target.dataset&&e.target.dataset.i; if(i===undefined) return;
+    cur().apart.splice(+i,1); save(); renderGroupsUI();
+  });
+
+  $("pick").addEventListener("click",pick);
+  const onKey=e=>{
+    if(e.code==="Space"&&!/TEXTAREA|INPUT|SELECT|BUTTON/.test(e.target.tagName)){e.preventDefault();state.mode==="groups"?makeGroups():pick()}
+  };
+  document.addEventListener("keydown",onKey);
+  $("roster").addEventListener("input",e=>{
+    cur().roster=e.target.value.split("\n").map(s=>s.trim()).filter(Boolean); save(); render();
+  });
+  $("listName").addEventListener("input",e=>{cur().name=e.target.value.trim()||"Untitled class";save();render()});
+  $("list").addEventListener("change",e=>{state.current=e.target.value;resetStage();save();render()});
+  $("norepeat").addEventListener("change",e=>{state.norepeat=e.target.checked;save();render()});
+  $("reset").addEventListener("click",()=>{cur().used=[];save();render();$("under").textContent="Turns reset. Everyone is back in."});
+  $("addList").addEventListener("click",()=>{
+    const id="l"+Date.now(); state.lists.push({id,name:`Class ${state.lists.length+1}`,roster:[],used:[],history:[],apart:[],groups:null});
+    state.current=id; resetStage(); save(); render(); $("roster").focus();
+  });
+  $("delList").addEventListener("click",()=>{$("delConfirm").hidden=false;$("delList").hidden=true});
+  $("delNo").addEventListener("click",()=>{$("delConfirm").hidden=true;$("delList").hidden=false});
+  $("delYes").addEventListener("click",()=>{
+    state.lists=state.lists.filter(l=>l.id!==state.current); state.current=state.lists[0].id;
+    $("delConfirm").hidden=true;$("delList").hidden=false; resetStage(); save(); render();
+  });
+  $("full").addEventListener("click",()=>{
+    const el=document.documentElement;
+    try{ if(document.fullscreenElement) document.exitFullscreen(); else el.requestFullscreen().catch(()=>{}) }catch(e){}
+  });
+  function resetStage(){const n=$("name");n.className="idle";n.textContent="Press Pick or the space bar";$("under").textContent="";fit()}
+
+  /* View mode: "auto" switches to mini when the window is small; the buttons override until the window crosses the size threshold again */
+  const isSmall=()=>innerWidth<640||innerHeight<520;
+  let view="auto", wasSmall=isSmall();
+  function applyView(){
+    const mini=view==="mini"||(view==="auto"&&isSmall());
+    document.body.classList.toggle("mini",mini);
+    fit();
+  }
+  function fit(){
+    const n=$("name"), s=$("stage");
+    n.style.fontSize="";
+    const grid=s.querySelector(".ggrid"); if(grid) grid.style.removeProperty("--gfs");
+    if(!s.ownerDocument.body.classList.contains("mini")) return;
+    if(state.mode==="groups"){
+      if(!grid) return;
+      const H=s.clientHeight-24, W=s.clientWidth-24;
+      let f=Math.min(W,H)/4, guard=0;
+      grid.style.setProperty("--gfs",f+"px");
+      while((grid.scrollHeight>H||grid.scrollWidth>W)&&f>9&&guard++<60){f*=0.93;grid.style.setProperty("--gfs",f+"px")}
+      return;
+    }
+    const maxW=s.clientWidth-24, maxH=s.clientHeight-24;
+    let size=parseFloat(getComputedStyle(n).fontSize), guard=0;
+    while((n.scrollWidth>maxW||n.offsetHeight>maxH)&&size>12&&guard++<40){
+      size*=0.9; n.style.fontSize=size+"px";
+    }
+  }
+  new MutationObserver(fit).observe($("name"),{childList:true,characterData:true,subtree:true});
+  addEventListener("resize",()=>{
+    const small=isSmall();
+    if(small!==wasSmall){view="auto";wasSmall=small}
+    applyView();
+  });
+  $("minibtn").addEventListener("click",()=>{view="mini";applyView()});
+  $("expand").addEventListener("click",()=>{view="full";applyView()});
+
+  /* Float: Chrome/Edge Document Picture-in-Picture keeps a small window above all others.
+     The name display and buttons move into it, then move back when it closes. */
+  const stageEl=$("stage"), controlsEl=$("controlsBar");
+  function syncBody(){
+    document.body.classList.toggle("groups",state.mode==="groups");
+    if(pipWin) pipWin.document.body.className="mini inpip"+(state.mode==="groups"?" groups":"");
+  }
+  const canFloat="documentPictureInPicture" in window;
+  $("floatBtn").hidden=!canFloat;
+  async function openFloat(){
+    if(pipWin){return}
+    let w;
+    try{w=await documentPictureInPicture.requestWindow({width:380,height:280})}
+    catch(e){$("under").textContent="This browser blocked the floating window. Use Chrome or Edge."; return}
+    pipWin=w;
+    for(const ss of document.styleSheets){
+      try{const st=w.document.createElement("style");st.textContent=[...ss.cssRules].map(r=>r.cssText).join("\n");w.document.head.appendChild(st)}
+      catch(e){if(ss.href){const l=w.document.createElement("link");l.rel="stylesheet";l.href=ss.href;w.document.head.appendChild(l)}}
+    }
+    const t=document.documentElement.getAttribute("data-theme"); if(t) w.document.documentElement.setAttribute("data-theme",t);
+    const wrap=w.document.createElement("div"); wrap.className="wrap";
+    wrap.append(stageEl,controlsEl); w.document.body.append(wrap);
+    $("floatNote").hidden=false;
+    syncBody();
+    w.addEventListener("resize",fit);
+    w.document.addEventListener("keydown",onKey);
+    w.addEventListener("pagehide",()=>{
+      $("floatNote").after(stageEl,controlsEl);
+      pipWin=null; $("floatNote").hidden=true; syncBody(); applyView();
+    });
+    fit();
+  }
+  $("floatBtn").addEventListener("click",openFloat);
+  $("dock").addEventListener("click",()=>{if(pipWin) pipWin.close()});
+  $("dockMain").addEventListener("click",()=>{if(pipWin) pipWin.close()});
+
+  render();
+  applyView();
+}
+</script>
+</body>
+</html>
